@@ -5,7 +5,6 @@ from config import MAX_CHARS
 
 
 def get_file_content(working_directory: str, file_path: str) -> str:
-    lines = []
     try:
         working_dir_abs = os.path.abspath(working_directory)
         target_file = os.path.normpath(os.path.join(working_dir_abs, file_path))
