@@ -3,7 +3,10 @@ from dotenv import load_dotenv
 from google import genai
 import argparse
 from google.genai import types
+from functions import call_functions
 from prompts import system_prompt
+from functions.call_functions import available_functions
+from functions.call_functions import call_function
 
 parser = argparse.ArgumentParser(description="Chatbot")
 parser.add_argument("user_prompt", type=str, help="User prompt")
@@ -20,9 +23,11 @@ if not api_key:
     raise RuntimeError("Key not found.")
 client = genai.Client(api_key=api_key)
 response = client.models.generate_content(
-    model="gemini-3.5-flash",
+    model="gemini-2.5-flash",
     contents=messages,
-    config=types.GenerateContentConfig(system_instruction=system_prompt),
+    config=types.GenerateContentConfig(
+        tools=[available_functions], system_instruction=system_prompt
+    ),
 )
 if response.usage_metadata.prompt_token_count is not None:
     x = response.usage_metadata.prompt_token_count
@@ -36,6 +41,20 @@ if args.verbose:
     print(
         f"""User prompt: {args.user_prompt}\nPrompt tokens: {x}\nResponse tokens: {y}"""
     )
+if response.function_calls is not None:
+    f_result_list = []
+    for f in response.function_calls:
+        function_call_result = call_function(f, args.verbose)
+        if not function_call_result.parts:
+            raise Exception("Can't be None")
+        if not function_call_result.parts[0].function_response:
+            raise Exception("Can't be None")
+        if not function_call_result.parts[0].function_response.response:
+            raise Exception("Can't be None")
+        f_result_list.append(function_call_result.parts[0])
+        if args.verbose:
+            print(f"-> {function_call_result.parts[0].function_response.response}")
+
 print(response.text)
 
 
