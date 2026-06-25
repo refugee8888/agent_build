@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 from google import genai
 import argparse
@@ -22,40 +23,53 @@ api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("Key not found.")
 client = genai.Client(api_key=api_key)
-response = client.models.generate_content(
-    model="gemini-2.5-flash",
-    contents=messages,
-    config=types.GenerateContentConfig(
-        tools=[available_functions], system_instruction=system_prompt
-    ),
-)
-if response.usage_metadata.prompt_token_count is not None:
-    x = response.usage_metadata.prompt_token_count
-else:
-    raise RuntimeError("Not found.")
-if response.usage_metadata.candidates_token_count is not None:
-    y = response.usage_metadata.candidates_token_count
-else:
-    raise RuntimeError("Not found.")
-if args.verbose:
-    print(
-        f"""User prompt: {args.user_prompt}\nPrompt tokens: {x}\nResponse tokens: {y}"""
+for _ in range(20):
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
+        ),
     )
-if response.function_calls is not None:
-    f_result_list = []
-    for f in response.function_calls:
-        function_call_result = call_function(f, args.verbose)
-        if not function_call_result.parts:
-            raise Exception("Can't be None")
-        if not function_call_result.parts[0].function_response:
-            raise Exception("Can't be None")
-        if not function_call_result.parts[0].function_response.response:
-            raise Exception("Can't be None")
-        f_result_list.append(function_call_result.parts[0])
-        if args.verbose:
-            print(f"-> {function_call_result.parts[0].function_response.response}")
+    if response.usage_metadata.prompt_token_count is not None:
+        x = response.usage_metadata.prompt_token_count
+    else:
+        raise RuntimeError("Not found.")
+    if response.usage_metadata.candidates_token_count is not None:
+        y = response.usage_metadata.candidates_token_count
+    else:
+        raise RuntimeError("Not found.")
+    if args.verbose:
+        print(
+            f"""User prompt: {args.user_prompt}\nPrompt tokens: {x}\nResponse tokens: {y}"""
+        )
+    if response.candidates is not None:
+        for c in response.candidates:
+            messages.append(c.content)
 
-print(response.text)
+    if response.function_calls is not None:
+        f_result_list = []
+        for f in response.function_calls:
+            function_call_result = call_function(f, args.verbose)
+            if not function_call_result.parts:
+                raise Exception("Can't be None")
+            if not function_call_result.parts[0].function_response:
+                raise Exception("Can't be None")
+            if not function_call_result.parts[0].function_response.response:
+                raise Exception("Can't be None")
+            f_result_list.append(function_call_result.parts[0])
+            if args.verbose:
+                print(f"-> {function_call_result.parts[0].function_response.response}")
+    messages.append(types.Content(role="user", parts=f_result_list))
+    if not response.function_calls:
+        print(response.text)
+        break
+
+if not response.text:
+    print(f"Could not produce a response")
+    sys.exit(1)
+    
+
 
 
 def main():
